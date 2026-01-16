@@ -144,7 +144,6 @@
   min-width: 0;
   white-space: nowrap;
   flex: 1;
-  overflow: hidden;
 }
 
 .workspace-title {
