@@ -142,6 +142,20 @@ pub(crate) struct AppSettings {
         rename = "experimentalSteerEnabled"
     )]
     pub(crate) experimental_steer_enabled: bool,
+    #[serde(default = "default_dictation_enabled", rename = "dictationEnabled")]
+    pub(crate) dictation_enabled: bool,
+    #[serde(
+        default = "default_dictation_model_id",
+        rename = "dictationModelId"
+    )]
+    pub(crate) dictation_model_id: String,
+    #[serde(default, rename = "dictationPreferredLanguage")]
+    pub(crate) dictation_preferred_language: Option<String>,
+    #[serde(
+        default = "default_dictation_hold_key",
+        rename = "dictationHoldKey"
+    )]
+    pub(crate) dictation_hold_key: String,
 }
 
 fn default_access_mode() -> String {
@@ -160,6 +174,18 @@ fn default_experimental_steer_enabled() -> bool {
     false
 }
 
+fn default_dictation_enabled() -> bool {
+    false
+}
+
+fn default_dictation_model_id() -> String {
+    "base".to_string()
+}
+
+fn default_dictation_hold_key() -> String {
+    "alt".to_string()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -168,6 +194,10 @@ impl Default for AppSettings {
             ui_scale: 1.0,
             notification_sounds_enabled: true,
             experimental_steer_enabled: false,
+            dictation_enabled: false,
+            dictation_model_id: default_dictation_model_id(),
+            dictation_preferred_language: None,
+            dictation_hold_key: default_dictation_hold_key(),
         }
     }
 }
@@ -184,6 +214,10 @@ mod tests {
         assert!((settings.ui_scale - 1.0).abs() < f64::EPSILON);
         assert!(settings.notification_sounds_enabled);
         assert!(!settings.experimental_steer_enabled);
+        assert!(!settings.dictation_enabled);
+        assert_eq!(settings.dictation_model_id, "base");
+        assert!(settings.dictation_preferred_language.is_none());
+        assert_eq!(settings.dictation_hold_key, "alt");
     }
 
     #[test]

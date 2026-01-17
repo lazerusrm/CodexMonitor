@@ -3,6 +3,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 mod backend;
 mod codex;
+mod dictation;
 mod event_sink;
 mod git;
 mod prompts;
@@ -172,7 +173,14 @@ pub fn run() {
             terminal::terminal_open,
             terminal::terminal_write,
             terminal::terminal_resize,
-            terminal::terminal_close
+            terminal::terminal_close,
+            dictation::dictation_model_status,
+            dictation::dictation_download_model,
+            dictation::dictation_cancel_download,
+            dictation::dictation_remove_model,
+            dictation::dictation_start,
+            dictation::dictation_stop,
+            dictation::dictation_cancel
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

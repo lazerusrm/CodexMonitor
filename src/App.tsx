@@ -58,6 +58,9 @@ import {
 import { useAppSettings } from "./features/settings/hooks/useAppSettings";
 import { useUpdater } from "./features/update/hooks/useUpdater";
 import { useComposerImages } from "./features/composer/hooks/useComposerImages";
+import { useDictationModel } from "./features/dictation/hooks/useDictationModel";
+import { useDictation } from "./features/dictation/hooks/useDictation";
+import { useHoldToDictate } from "./features/dictation/hooks/useHoldToDictate";
 import { useQueuedSend } from "./features/threads/hooks/useQueuedSend";
 import { useWorktreePrompt } from "./features/workspaces/hooks/useWorktreePrompt";
 import { useUiScaleShortcuts } from "./features/layout/hooks/useUiScaleShortcuts";
@@ -91,6 +94,20 @@ function MainApp() {
     saveSettings,
     doctor
   } = useAppSettings();
+  const dictationModel = useDictationModel(appSettings.dictationModelId);
+  const {
+    state: dictationState,
+    level: dictationLevel,
+    transcript: dictationTranscript,
+    error: dictationError,
+    hint: dictationHint,
+    start: startDictation,
+    stop: stopDictation,
+    cancel: cancelDictation,
+    clearTranscript: clearDictationTranscript,
+    clearError: clearDictationError,
+    clearHint: clearDictationHint,
+  } = useDictation();
   const {
     uiScale,
     scaleShortcutTitle,
@@ -152,10 +169,65 @@ function MainApp() {
   const [composerInsert, setComposerInsert] = useState<QueuedMessage | null>(
     null
   );
+  type SettingsSection = "projects" | "display" | "dictation" | "codex" | "experimental";
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(
+    null,
+  );
   const [reduceTransparency, setReduceTransparency] = useState(() => {
     const stored = localStorage.getItem("reduceTransparency");
     return stored === "true";
+  });
+  const dictationReady = dictationModel.status?.state === "ready";
+  const holdDictationKey = (appSettings.dictationHoldKey ?? "").toLowerCase();
+  const handleToggleDictation = useCallback(async () => {
+    if (!appSettings.dictationEnabled || !dictationReady) {
+      return;
+    }
+    try {
+      if (dictationState === "listening") {
+        await stopDictation();
+        return;
+      }
+      if (dictationState === "idle") {
+        await startDictation(appSettings.dictationPreferredLanguage);
+      }
+    } catch {
+      // Errors are surfaced through dictation events.
+    }
+  }, [
+    appSettings.dictationEnabled,
+    appSettings.dictationPreferredLanguage,
+    dictationReady,
+    dictationState,
+    startDictation,
+    stopDictation,
+  ]);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      if (dictationState !== "listening" && dictationState !== "processing") {
+        return;
+      }
+      event.preventDefault();
+      void cancelDictation();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [dictationState, cancelDictation]);
+
+  useHoldToDictate({
+    enabled: appSettings.dictationEnabled,
+    ready: dictationReady,
+    state: dictationState,
+    preferredLanguage: appSettings.dictationPreferredLanguage,
+    holdKey: holdDictationKey,
+    startDictation,
+    stopDictation,
+    cancelDictation,
   });
   const {
     debugOpen,
@@ -593,7 +665,13 @@ function MainApp() {
     });
   }
 
-  const handleOpenSettings = () => setSettingsOpen(true);
+  const handleOpenSettings = useCallback(
+    (section?: SettingsSection) => {
+      setSettingsSection(section ?? null);
+      setSettingsOpen(true);
+    },
+    [],
+  );
 
   const orderValue = (entry: WorkspaceInfo) =>
     typeof entry.settings.sortOrder === "number"
@@ -704,7 +782,8 @@ function MainApp() {
     activeRateLimits,
     approvals,
     handleApprovalDecision,
-    onOpenSettings: handleOpenSettings,
+    onOpenSettings: () => handleOpenSettings(),
+    onOpenDictationSettings: () => handleOpenSettings("dictation"),
     onOpenDebug: handleDebugClick,
     showDebugButton,
     onAddWorkspace: handleAddWorkspace,
@@ -885,6 +964,18 @@ function MainApp() {
     prompts,
     files,
     textareaRef: composerInputRef,
+    dictationEnabled: appSettings.dictationEnabled && dictationReady,
+    dictationState,
+    dictationLevel,
+    onToggleDictation: handleToggleDictation,
+    dictationTranscript,
+    onDictationTranscriptHandled: (id) => {
+      clearDictationTranscript(id);
+    },
+    dictationError,
+    onDismissDictationError: clearDictationError,
+    dictationHint,
+    onDismissDictationHint: clearDictationHint,
     showComposer,
     plan: activePlan,
     debugEntries,
@@ -1010,7 +1101,10 @@ function MainApp() {
       {settingsOpen && (
         <SettingsView
           workspaces={workspaces}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => {
+            setSettingsOpen(false);
+            setSettingsSection(null);
+          }}
           onMoveWorkspace={handleMoveWorkspace}
           onDeleteWorkspace={(workspaceId) => {
             void removeWorkspace(workspaceId);
@@ -1028,6 +1122,11 @@ function MainApp() {
           scaleShortcutTitle={scaleShortcutTitle}
           scaleShortcutText={scaleShortcutText}
           onTestNotificationSound={handleTestNotificationSound}
+          dictationModelStatus={dictationModel.status}
+          onDownloadDictationModel={dictationModel.download}
+          onCancelDictationDownload={dictationModel.cancel}
+          onRemoveDictationModel={dictationModel.remove}
+          initialSection={settingsSection ?? undefined}
         />
       )}
     </div>

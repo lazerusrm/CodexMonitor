@@ -68,6 +68,10 @@ export type AppSettings = {
   uiScale: number;
   notificationSoundsEnabled: boolean;
   experimentalSteerEnabled: boolean;
+  dictationEnabled: boolean;
+  dictationModelId: string;
+  dictationPreferredLanguage: string | null;
+  dictationHoldKey: string | null;
 };
 
 export type CodexDoctorResult = {
@@ -231,3 +235,32 @@ export type DebugEntry = {
 };
 
 export type TerminalStatus = "idle" | "connecting" | "ready" | "error";
+
+export type DictationModelState = "missing" | "downloading" | "ready" | "error";
+
+export type DictationDownloadProgress = {
+  totalBytes?: number | null;
+  downloadedBytes: number;
+};
+
+export type DictationModelStatus = {
+  state: DictationModelState;
+  modelId: string;
+  progress?: DictationDownloadProgress | null;
+  error?: string | null;
+  path?: string | null;
+};
+
+export type DictationSessionState = "idle" | "listening" | "processing";
+
+export type DictationEvent =
+  | { type: "state"; state: DictationSessionState }
+  | { type: "level"; value: number }
+  | { type: "transcript"; text: string }
+  | { type: "error"; message: string }
+  | { type: "canceled"; message: string };
+
+export type DictationTranscript = {
+  id: string;
+  text: string;
+};

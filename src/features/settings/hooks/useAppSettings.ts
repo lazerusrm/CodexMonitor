@@ -9,6 +9,10 @@ const defaultSettings: AppSettings = {
   uiScale: UI_SCALE_DEFAULT,
   notificationSoundsEnabled: true,
   experimentalSteerEnabled: false,
+  dictationEnabled: false,
+  dictationModelId: "base",
+  dictationPreferredLanguage: null,
+  dictationHoldKey: "alt",
 };
 
 function normalizeAppSettings(settings: AppSettings): AppSettings {
