@@ -12,6 +12,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-test-
       - name: Install CMake
         run: command -v cmake >/dev/null 2>&1 || brew install cmake
       - name: Rust tests
@@ -66,6 +76,16 @@ jobs:
           node-version: "20"
           cache: "npm"
       - uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-build-
       - name: Install CMake
         run: command -v cmake >/dev/null 2>&1 || brew install cmake
       - name: Install dependencies
