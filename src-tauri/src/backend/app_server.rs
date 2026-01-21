@@ -72,54 +72,152 @@ impl WorkspaceSession {
     }
 }
 
-pub(crate) fn build_codex_path_env(codex_bin: Option<&str>) -> Option<String> {
-    let mut paths: Vec<String> = env::var("PATH")
-        .unwrap_or_default()
-        .split(':')
-        .filter(|value| !value.is_empty())
-        .map(|value| value.to_string())
-        .collect();
-    let mut extras = vec![
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        "/usr/bin",
-        "/bin",
-        "/usr/sbin",
-        "/sbin",
-    ]
-    .into_iter()
-    .map(|value| value.to_string())
-    .collect::<Vec<String>>();
-    if let Ok(home) = env::var("HOME") {
-        extras.push(format!("{home}/.local/bin"));
-        extras.push(format!("{home}/.local/share/mise/shims"));
-        extras.push(format!("{home}/.cargo/bin"));
-        extras.push(format!("{home}/.bun/bin"));
-        let nvm_root = Path::new(&home).join(".nvm/versions/node");
-        if let Ok(entries) = std::fs::read_dir(nvm_root) {
-            for entry in entries.flatten() {
-                let bin_path = entry.path().join("bin");
-                if bin_path.is_dir() {
-                    extras.push(bin_path.to_string_lossy().to_string());
+/// Platform-specific PATH separator
+#[cfg(windows)]
+const PATH_SEPARATOR: char = ';';
+#[cfg(not(windows))]
+const PATH_SEPARATOR: char = ':';
+
+/// Resolve home directory using platform-appropriate environment variables
+fn resolve_home_dir() -> Option<String> {
+    if let Ok(value) = env::var("HOME") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Ok(value) = env::var("USERPROFILE") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    None
+}
+
+/// Build platform-specific extra paths for common tool locations
+fn build_extra_paths(codex_bin: Option<&str>) -> Vec<String> {
+    let mut extras = Vec::new();
+
+    #[cfg(not(windows))]
+    {
+        extras.extend([
+            "/opt/homebrew/bin".to_string(),
+            "/usr/local/bin".to_string(),
+            "/usr/bin".to_string(),
+            "/bin".to_string(),
+            "/usr/sbin".to_string(),
+            "/sbin".to_string(),
+        ]);
+    }
+
+    if let Some(home) = resolve_home_dir() {
+        #[cfg(not(windows))]
+        {
+            extras.push(format!("{home}/.local/bin"));
+            extras.push(format!("{home}/.local/share/mise/shims"));
+            extras.push(format!("{home}/.cargo/bin"));
+            extras.push(format!("{home}/.bun/bin"));
+
+            let nvm_root = Path::new(&home).join(".nvm/versions/node");
+            if let Ok(entries) = std::fs::read_dir(&nvm_root) {
+                for entry in entries.flatten() {
+                    let bin_path = entry.path().join("bin");
+                    if bin_path.is_dir() {
+                        extras.push(bin_path.to_string_lossy().to_string());
+                    }
                 }
             }
         }
+
+        #[cfg(windows)]
+        {
+            extras.push(format!("{home}/.cargo/bin"));
+            extras.push(format!("{home}/.bun/bin"));
+
+            if let Ok(appdata) = env::var("APPDATA") {
+                let nvm_root = Path::new(&appdata).join("nvm");
+                if nvm_root.is_dir() {
+                    extras.push(nvm_root.to_string_lossy().to_string());
+                    if let Ok(entries) = std::fs::read_dir(&nvm_root) {
+                        for entry in entries.flatten() {
+                            let path = entry.path();
+                            if path.is_dir() && path.join("node.exe").exists() {
+                                extras.push(path.to_string_lossy().to_string());
+                            }
+                        }
+                    }
+                }
+                let npm_bin = Path::new(&appdata).join("npm");
+                if npm_bin.is_dir() {
+                    extras.push(npm_bin.to_string_lossy().to_string());
+                }
+            }
+
+            if let Ok(localappdata) = env::var("LOCALAPPDATA") {
+                let volta_bin = Path::new(&localappdata).join("Volta/bin");
+                if volta_bin.is_dir() {
+                    extras.push(volta_bin.to_string_lossy().to_string());
+                }
+                let pnpm_home = Path::new(&localappdata).join("pnpm");
+                if pnpm_home.is_dir() {
+                    extras.push(pnpm_home.to_string_lossy().to_string());
+                }
+            }
+
+            let scoop_shims = Path::new(&home).join("scoop/shims");
+            if scoop_shims.is_dir() {
+                extras.push(scoop_shims.to_string_lossy().to_string());
+            }
+        }
     }
+
+    #[cfg(windows)]
+    {
+        if let Ok(program_files) = env::var("ProgramFiles") {
+            let git_cmd = Path::new(&program_files).join("Git/cmd");
+            if git_cmd.is_dir() {
+                extras.push(git_cmd.to_string_lossy().to_string());
+            }
+            let nodejs = Path::new(&program_files).join("nodejs");
+            if nodejs.is_dir() {
+                extras.push(nodejs.to_string_lossy().to_string());
+            }
+        }
+        if let Ok(systemroot) = env::var("SystemRoot") {
+            extras.push(format!("{systemroot}/System32"));
+        }
+    }
+
     if let Some(bin_path) = codex_bin.filter(|value| !value.trim().is_empty()) {
-        let parent = Path::new(bin_path).parent();
-        if let Some(parent) = parent {
+        if let Some(parent) = Path::new(bin_path).parent() {
             extras.push(parent.to_string_lossy().to_string());
         }
     }
+
+    extras
+}
+
+pub(crate) fn build_codex_path_env(codex_bin: Option<&str>) -> Option<String> {
+    let mut paths: Vec<String> = env::var("PATH")
+        .unwrap_or_default()
+        .split(PATH_SEPARATOR)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+        .collect();
+
+    let extras = build_extra_paths(codex_bin);
+
     for extra in extras {
         if !paths.contains(&extra) {
             paths.push(extra);
         }
     }
+
     if paths.is_empty() {
         None
     } else {
-        Some(paths.join(":"))
+        Some(paths.join(&PATH_SEPARATOR.to_string()))
     }
 }
 

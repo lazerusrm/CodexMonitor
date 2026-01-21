@@ -1384,16 +1384,64 @@ pub(crate) async fn open_workspace_in(
     path: String,
     app: String,
 ) -> Result<(), String> {
-    let status = std::process::Command::new("open")
-        .arg("-a")
-        .arg(app)
-        .arg(path)
-        .status()
-        .map_err(|error| format!("Failed to open app: {error}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err("Failed to open app".to_string())
+    #[cfg(target_os = "macos")]
+    {
+        let status = std::process::Command::new("open")
+            .arg("-a")
+            .arg(&app)
+            .arg(&path)
+            .status()
+            .map_err(|error| format!("Failed to open app: {error}"))?;
+        if status.success() {
+            return Ok(());
+        } else {
+            return Err("Failed to open app".to_string());
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Map display names to Windows executables/commands
+        let (exe, args): (&str, Vec<&str>) = match app.as_str() {
+            "Visual Studio Code" => ("cmd", vec!["/c", "code", &path]),
+            "Cursor" => ("cmd", vec!["/c", "cursor", &path]),
+            "Zed" => ("zed", vec![&path]),
+            "Ghostty" => ("ghostty", vec![&path]),
+            "Antigravity" => ("antigravity", vec![&path]),
+            _ => return Err(format!("Unknown application: {app}")),
+        };
+        
+        let status = std::process::Command::new(exe)
+            .args(&args)
+            .status()
+            .map_err(|error| format!("Failed to open app: {error}"))?;
+        if status.success() {
+            return Ok(());
+        } else {
+            return Err("Failed to open app".to_string());
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let exe = match app.as_str() {
+            "Visual Studio Code" => "code",
+            "Cursor" => "cursor",
+            "Zed" => "zed",
+            "Ghostty" => "ghostty",
+            "Antigravity" => "antigravity",
+            _ => return Err(format!("Unknown application: {app}")),
+        };
+        
+        let status = std::process::Command::new(exe)
+            .arg(&path)
+            .status()
+            .map_err(|error| format!("Failed to open app: {error}"))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err("Failed to open app".to_string())
+        }
     }
 }
 
